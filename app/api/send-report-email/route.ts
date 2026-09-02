@@ -44,12 +44,16 @@ export async function POST(req: NextRequest) {
     const mouvements = engine.journal
       .filter((e) => e.membre_id === targetId)
       .sort((a, b) => b.date.localeCompare(a.date));
+    // engine.capTable est déjà trié par capital décroissant (voir engine.ts).
+    const rangIndex = engine.capTable.findIndex((c) => c.membre_id === targetId);
+    const rang = rangIndex === -1 ? null : { position: rangIndex + 1, total: engine.capTable.length };
 
     const pdfBuffer = buildRapportPdf({
       membre: membre as Membre,
       capRow,
       totals: engine.totals,
       mouvements,
+      rang,
     });
 
     await sendPdfEmail({
