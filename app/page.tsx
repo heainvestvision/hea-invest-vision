@@ -1,6 +1,7 @@
 import { requireMembre } from '@/lib/current-membre';
 import { loadEngine, fmtNum, fmtDate, titleCase } from '@/lib/data';
 import Shell from '@/components/Shell';
+import EvolutionChart from '@/components/EvolutionChart';
 
 export default async function DashboardPage() {
   const membre = await requireMembre();
@@ -9,6 +10,9 @@ export default async function DashboardPage() {
   const perfClass = t.perfGlobale >= 0 ? 'pos' : 'neg';
   const top5 = engine.capTable.slice(0, 5);
   const nomById = new Map(membres.map((m) => [m.id, titleCase(m.nom)]));
+  const vlChartData = [...engine.valorisations]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((v) => ({ date: v.date, value: v.vl_part }));
 
   return (
     <Shell membre={membre} active="/">
@@ -30,6 +34,12 @@ export default async function DashboardPage() {
           </p>
         </div>
       )}
+
+      <div className="card">
+        <h2>Évolution de la valeur liquidative</h2>
+        <p className="card-sub">VL par part depuis le début du suivi</p>
+        <EvolutionChart data={vlChartData} decimals={4} />
+      </div>
 
       <div className="card">
         <h2>Top contributeurs</h2>
