@@ -1,12 +1,22 @@
 import { requireAdmin } from '@/lib/current-membre';
 import { loadEngine, fmtNum, fmtDate, titleCase } from '@/lib/data';
 import Shell from '@/components/Shell';
-import { ajouterDepot, ajouterMouvement, souscrirePending, supprimerEcriture } from './actions';
+import SouscriptionForm from '@/components/SouscriptionForm';
+import RetraitForm from '@/components/RetraitForm';
+import { ajouterDepot, ajouterMouvement, supprimerEcriture } from './actions';
 
 export default async function JournalPage() {
   const membre = await requireAdmin();
-  const { engine, membres } = await loadEngine();
+  const { engine, membres, parametres } = await loadEngine();
   const nomById = new Map(membres.map((m) => [m.id, titleCase(m.nom)]));
+  const nomByIdObj: Record<string, string> = {};
+  membres.forEach((m) => {
+    nomByIdObj[m.id] = titleCase(m.nom);
+  });
+  const partsById: Record<string, number> = {};
+  engine.capTable.forEach((c) => {
+    partsById[c.membre_id] = c.parts;
+  });
   const rows = [...engine.journal].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
@@ -40,33 +50,38 @@ export default async function JournalPage() {
       {engine.pending.length > 0 && (
         <div className="card">
           <h2>2. Souscrire les dépôts en attente</h2>
-          <p className="card-sub">Sélectionne les dépôts à traiter ensemble et la date de souscription commune.</p>
-          <form action={souscrirePending}>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th></th><th>Date</th><th>Membre</th><th className="num">Montant</th></tr></thead>
-                <tbody>
-                  {engine.pending.map((e) => (
-                    <tr key={e.id}>
-                      <td><input type="checkbox" name="ids" value={e.id} defaultChecked /></td>
-                      <td>{fmtDate(e.date)}</td>
-                      <td>{nomById.get(e.membre_id!) ?? e.membre_id}</td>
-                      <td className="num">{fmtNum(e.montant, 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="form-actions" style={{ marginTop: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 600 }}>
-                Date de souscription
-                <input type="date" name="dateSouscription" required />
-              </label>
-              <button type="submit" className="primary">Souscrire la sélection</button>
-            </div>
-          </form>
+          <p className="card-sub">
+            Sélectionne les dépôts à traiter ensemble et la date de souscription commune : leurs
+            parts seront attribuées à la VL applicable à cette date. Si des frais ont été engagés
+            pour réaliser l&rsquo;opération, indique leur montant total : il sera réparti à parts
+            égales entre les dépôts de cette vague. Précise ensuite quelle part correspond à une
+            dépense réelle — le reste, non dépensé, part automatiquement en réserve.
+          </p>
+          <SouscriptionForm
+            pending={engine.pending.map((e) => ({
+              id: e.id,
+              date: e.date,
+              membre_id: e.membre_id,
+              montant: e.montant,
+            }))}
+            nomById={nomByIdObj}
+          />
         </div>
       )}
+
+      <div className="card">
+        <h2>Enregistrer un retrait</h2>
+        <p className="card-sub">
+          La pénalité est calculée automatiquement selon l&rsquo;ancienneté du premier dépôt du
+          membre. Le montant net est versé immédiatement, sans file d&rsquo;attente.
+        </p>
+        <RetraitForm
+          membres={membres.map((m) => ({ id: m.id, nom: m.nom, date_1er_depot: m.date_1er_depot }))}
+          partsById={partsById}
+          vlPart={engine.totals.vlPart}
+          parametres={parametres}
+        />
+      </div>
 
       <div className="card">
         <h2 className="section-bar" style={{ margin: '-20px -22px 16px', borderRadius: '14px 14px 0 0' }}>Mouvement interne (frais, réserve, transfert)</h2>
