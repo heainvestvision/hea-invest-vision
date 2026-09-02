@@ -36,13 +36,20 @@ export default async function DashboardPage() {
         <p className="card-sub">Classement par capital apporté</p>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Membre</th><th className="num">Capital (FCFA)</th><th className="num">% détention</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Membre</th>
+                {membre.is_admin && <th className="num">Capital (FCFA)</th>}
+                <th className="num">% détention</th>
+              </tr>
+            </thead>
             <tbody>
               {top5.map((m, i) => (
                 <tr key={m.membre_id}>
                   <td className={i === 0 ? 'rank1' : ''}>{i + 1}</td>
                   <td>{nomById.get(m.membre_id) ?? m.membre_id}</td>
-                  <td className="num">{fmtNum(m.capital, 0)}</td>
+                  {membre.is_admin && <td className="num">{fmtNum(m.capital, 0)}</td>}
                   <td className="num">{fmtNum(m.pct * 100, 2)} %</td>
                 </tr>
               ))}
