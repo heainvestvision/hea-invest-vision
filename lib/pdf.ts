@@ -154,9 +154,7 @@ export interface RapportInput {
 export function buildRapportPdf(input: RapportInput): Buffer {
   const { membre, capRow, totals, mouvements, rang } = input;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const civilite = membre.salutation ? `${membre.salutation} ` : '';
-  const nomComplet = titleCase(membre.nom);
-  const prenomAffiche = membre.prenom ? titleCase(membre.prenom) : nomComplet.split(' ')[0];
+  const prenomAffiche = membre.prenom ? titleCase(membre.prenom) : titleCase(membre.nom).split(' ')[0];
 
   const capital = capRow?.capital ?? 0;
   const parts = capRow?.parts ?? 0;
@@ -167,7 +165,7 @@ export function buildRapportPdf(input: RapportInput): Buffer {
 
   pdfHeaderDoc(doc, 'RAPPORT INDIVIDUEL', `Arrêté au ${fmtDate(totals.dateArrete)}`);
 
-  pdfLabeledBox(doc, 'Membre :', `${civilite}${nomComplet}`, 14, 32, 130);
+  pdfLabeledBox(doc, 'Membre :', membre.nom, 14, 32, 130);
 
   pdfSectionBar(doc, 'Votre situation au sein du club', 14, 182, 48);
   let y = pdfStatTable(doc, 56, [
@@ -309,13 +307,11 @@ export function buildAvisPdf(input: AvisInput): Buffer {
   } = input;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const aujourdhui = new Date().toISOString().slice(0, 10);
-  const civilite = membre.salutation ? `${membre.salutation} ` : '';
-  const nomComplet = titleCase(membre.nom);
-  const prenomAffiche = membre.prenom ? titleCase(membre.prenom) : nomComplet.split(' ')[0];
+  const prenomAffiche = membre.prenom ? titleCase(membre.prenom) : titleCase(membre.nom).split(' ')[0];
 
   pdfHeaderDoc(doc, 'AVIS DE SOUSCRIPTION', `Document généré le ${fmtDate(aujourdhui)}`);
 
-  pdfLabeledBox(doc, 'Membre :', `${civilite}${nomComplet}`, 14, 32, 130);
+  pdfLabeledBox(doc, 'Membre :', membre.nom, 14, 32, 130);
   pdfLabeledBox(doc, 'Date du dernier dépôt :', fmtDate(dateSouscription), 14, 45, 55, 62);
 
   pdfSectionBar(doc, 'Confirmation de votre versement', 14, 182, 62);
