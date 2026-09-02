@@ -48,14 +48,16 @@ export default function Shell({
           </form>
         </div>
       </div>
-      <nav className="tabs">
-        {tabs.map((t) => (
-          <Link key={t.href} href={t.href} className={active === t.href ? 'active' : ''}>
-            {t.label}
-          </Link>
-        ))}
-      </nav>
-      {children}
+      <div className="layout">
+        <nav className="sidebar">
+          {tabs.map((t) => (
+            <Link key={t.href} href={t.href} className={active === t.href ? 'active' : ''}>
+              {t.label}
+            </Link>
+          ))}
+        </nav>
+        <main className="main-content">{children}</main>
+      </div>
     </div>
   );
 }
