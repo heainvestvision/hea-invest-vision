@@ -6,6 +6,7 @@ const ADMIN_TABS = [
   { href: '/captable', label: 'Cap Table' },
   { href: '/journal', label: 'Journal' },
   { href: '/valorisations', label: 'Valorisations' },
+  { href: '/simulateurs', label: 'Simulateurs' },
   { href: '/membres', label: 'Membres' },
   { href: '/avis', label: 'Avis de souscription' },
   { href: '/rapport', label: 'Rapports individuels' },
