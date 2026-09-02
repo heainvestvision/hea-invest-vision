@@ -32,7 +32,8 @@ export default function Shell({
     <div className="shell">
       <div className="topbar">
         <div className="brand">
-          <div className="brand-mark">HEA</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand-mark.png" alt="HEA Invest Vision" className="brand-mark" />
           <div className="brand-text">
             <h1>HEA Invest Vision</h1>
             <p>Club d&rsquo;investissement — Console de gestion</p>
