@@ -1,5 +1,5 @@
 import { requireAdmin } from '@/lib/current-membre';
-import { loadEngine, fmtNum, fmtDate } from '@/lib/data';
+import { loadEngine, fmtNum, fmtDate, buildVlEvolution } from '@/lib/data';
 import Shell from '@/components/Shell';
 import EvolutionChart from '@/components/EvolutionChart';
 import { ajouterValorisation, supprimerValorisation } from './actions';
@@ -8,9 +8,7 @@ export default async function ValorisationsPage() {
   const membre = await requireAdmin();
   const { engine } = await loadEngine();
 
-  const chartData = [...engine.valorisations]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((v) => ({ date: v.date, value: v.vl_part }));
+  const chartData = buildVlEvolution(engine);
 
   const rows = [...engine.valorisations].sort((a, b) => b.date.localeCompare(a.date));
 
