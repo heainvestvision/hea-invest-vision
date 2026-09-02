@@ -55,7 +55,7 @@ h1, h2, h3 { font-family: "Times New Roman", Times, Georgia, serif; margin: 0; f
 .mono, .num { font-variant-numeric: tabular-nums; }
 a { color: inherit; }
 
-.shell { max-width: 1180px; margin: 0 auto; padding: 0 20px 64px; }
+.shell { max-width: 1240px; margin: 0 auto; padding: 0 20px 64px; }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -71,12 +71,31 @@ a { color: inherit; }
 .brand-text h1 { font-size: 20px; }
 .brand-text p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-soft); }
 
-nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 26px; overflow-x: auto; }
-nav.tabs a {
-  font-size: 13.5px; font-weight: 600; color: var(--ink-soft); padding: 11px 16px;
-  cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; text-decoration: none;
+.layout { display: flex; gap: 26px; align-items: flex-start; }
+.sidebar {
+  width: 196px; flex: none; display: flex; flex-direction: column; gap: 2px;
+  position: sticky; top: 20px;
 }
-nav.tabs a.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.sidebar a {
+  font-size: 13.5px; font-weight: 600; color: var(--ink-soft); padding: 10px 14px;
+  border-radius: 9px; cursor: pointer; white-space: nowrap; text-decoration: none;
+}
+.sidebar a:hover { background: var(--surface-2); }
+.sidebar a.active {
+  color: var(--accent-ink); font-weight: 700; background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--accent), var(--shadow);
+}
+.main-content { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 720px) {
+  .layout { flex-direction: column; }
+  .sidebar {
+    width: 100%; flex-direction: row; overflow-x: auto; position: static;
+    gap: 4px; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .sidebar a { flex: none; }
+  .sidebar a.active { box-shadow: none; border-bottom: 2px solid var(--accent); border-radius: 9px 9px 0 0; }
+}
 
 .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
