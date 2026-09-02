@@ -59,6 +59,17 @@ export async function POST(req: NextRequest) {
     // où elle vaut vl_implicite — que pour une vague Post-fondation).
     const vlPart = (entry.montant - (entry.frais_impute || 0)) / entry.parts_calculees;
 
+    // "Cette vague" = l'ensemble des dépôts souscrits à la même date d'effet
+    // (même valorisation appliquée) — sert à afficher le total des frais prélevés
+    // sur la vague et le nombre de souscripteurs, comme dans le gabarit d'origine.
+    const memeVague = engine.journal.filter(
+      (e) => e.type === 'Dépôt' && !e.en_attente && e.date_effective === dateSouscription
+    );
+    const totalFraisVague = memeVague.reduce((s, e) => s + (e.frais_impute || 0), 0);
+    const nombreSouscripteurs = new Set(memeVague.map((e) => e.membre_id)).size;
+
+    const capRow = engine.capTable.find((c) => c.membre_id === entry.membre_id) ?? null;
+
     const pdfBuffer = buildAvisPdf({
       membre: membre as Membre,
       montant: entry.montant,
@@ -66,6 +77,11 @@ export async function POST(req: NextRequest) {
       vlPart,
       partsAttribuees: entry.parts_calculees,
       vague: entry.vague ?? '—',
+      moyen: entry.moyen,
+      fraisIndividuels: entry.frais_impute || 0,
+      totalFraisVague,
+      nombreSouscripteurs,
+      position: capRow ? { capital: capRow.capital, parts: capRow.parts, pct: capRow.pct } : null,
     });
 
     await sendPdfEmail({
