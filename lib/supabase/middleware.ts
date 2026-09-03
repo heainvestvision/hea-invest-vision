@@ -3,7 +3,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/auth'];
+// /api/cron n'est pas dans la liste parce qu'un utilisateur y serait connecté :
+// c'est Vercel Cron qui l'appelle directement, sans session ni cookie. Cette
+// route se protège elle-même avec un secret dédié (CRON_SECRET), vérifié dans
+// app/api/cron/monthly-reports/route.ts.
+const PUBLIC_PATHS = ['/login', '/auth', '/api/cron'];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
