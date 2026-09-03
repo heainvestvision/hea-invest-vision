@@ -60,3 +60,24 @@ export async function sendPdfEmail(input: SendPdfEmailInput): Promise<void> {
     ],
   });
 }
+
+export interface SendTextEmailInput {
+  to: string;
+  subject: string;
+  bodyText: string;
+}
+
+// Variante sans pièce jointe — pour les rappels automatiques (ex: relance de
+// valorisation), qui n'ont rien à joindre, contrairement aux rapports/avis en PDF.
+export async function sendTextEmail(input: SendTextEmailInput): Promise<void> {
+  const { to, subject, bodyText } = input;
+  const transport = getTransport();
+  const from = process.env.GMAIL_USER!;
+
+  await transport.sendMail({
+    from: `"HEA Invest Vision" <${from}>`,
+    to,
+    subject,
+    text: bodyText,
+  });
+}
