@@ -17,10 +17,15 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Formulaire de retrait — absent de l'app déployée jusqu'ici, réintroduit à l'identique
-// du prototype : la pénalité est calculée en direct selon l'ancienneté du premier dépôt
-// du membre (mêmes 4 paliers que computePenalite dans lib/engine.ts, réutilisée ici
-// telle quelle côté client puisqu'elle est pure — aucune dépendance serveur).
+// Formulaire de retrait — réintroduit à l'identique du prototype pour la pénalité
+// (calculée en direct selon l'ancienneté du premier dépôt du membre, mêmes 4 paliers
+// que computePenalite dans lib/engine.ts, réutilisée ici telle quelle côté client
+// puisqu'elle est pure), puis étendu : les frais réels engagés pour exécuter le
+// retrait (virement, déplacement...) sont saisis ici et déduits de la pénalité
+// retenue — jamais du montant versé au membre. Ce qui reste de la pénalité après ces
+// frais (le "reliquat") est reconverti en nouvelles parts, réparties à parts égales
+// entre tous les autres membres encore présents dans le club — voir ajouterRetrait
+// dans app/journal/actions.ts pour le détail des écritures créées.
 export default function RetraitForm({
   membres,
   partsById,
@@ -35,10 +40,16 @@ export default function RetraitForm({
   const [membreId, setMembreId] = useState(membres[0]?.id ?? '');
   const [date, setDate] = useState(todayISO());
   const [partsWanted, setPartsWanted] = useState('');
+  const [fraisReelsStr, setFraisReelsStr] = useState('');
 
   const membre = membres.find((m) => m.id === membreId) ?? null;
   const partsMax = membre ? partsById[membre.id] ?? 0 : 0;
   const parts = parseFloat(partsWanted);
+  const fraisReels = fraisReelsStr ? parseFloat(fraisReelsStr) || 0 : 0;
+
+  const membresRestants = Object.entries(partsById).filter(
+    ([id, p]) => id !== membreId && p > 1e-9
+  ).length;
 
   let preview: ReactNode = null;
   let disabled = true;
@@ -109,27 +120,68 @@ export default function RetraitForm({
       const valeurBrute = parts * vlPart;
       const penalite = valeurBrute * taux;
       const net = valeurBrute - penalite;
-      disabled = false;
-      preview = (
-        <div className="calc-box">
-          <div className="item">
-            <div className="label">VL appliquée</div>
-            <div className="value">{fmtNum(vlPart, 4)}</div>
+      const fraisInvalides = fraisReels > penalite + 1e-6;
+
+      if (fraisInvalides) {
+        preview = (
+          <div className="calc-box err">
+            <div className="item">
+              <div className="label">Frais réels saisis</div>
+              <div className="value">{fmtNum(fraisReels, 0)} FCFA</div>
+            </div>
+            <div className="item">
+              <div className="label">Pénalité disponible</div>
+              <div className="value">{fmtNum(Math.round(penalite), 0)} FCFA</div>
+            </div>
+            <div className="item">
+              <div className="label">Erreur</div>
+              <div className="value">les frais réels dépassent la pénalité retenue</div>
+            </div>
           </div>
-          <div className="item">
-            <div className="label">Valeur brute</div>
-            <div className="value">{fmtNum(valeurBrute, 0)}</div>
+        );
+      } else {
+        const reliquat = penalite - fraisReels;
+        const partsParMembre = membresRestants > 0 ? reliquat / vlPart / membresRestants : 0;
+        disabled = false;
+        preview = (
+          <div className="calc-box">
+            <div className="item">
+              <div className="label">VL appliquée</div>
+              <div className="value">{fmtNum(vlPart, 4)}</div>
+            </div>
+            <div className="item">
+              <div className="label">Valeur brute</div>
+              <div className="value">{fmtNum(valeurBrute, 0)}</div>
+            </div>
+            <div className="item">
+              <div className="label">Pénalité ({fmtPct(taux, 0)}, {fmtNum(years, 1)} an{years >= 2 ? 's' : ''})</div>
+              <div className="value neg">-{fmtNum(penalite, 0)}</div>
+            </div>
+            <div className="item">
+              <div className="label">Montant net à verser</div>
+              <div className="value pos">{fmtNum(net, 0)} FCFA</div>
+            </div>
+            {fraisReels > 0 && (
+              <div className="item">
+                <div className="label">dont frais réels</div>
+                <div className="value">{fmtNum(fraisReels, 0)} FCFA</div>
+              </div>
+            )}
+            <div className="item">
+              <div className="label">Reliquat pénalité</div>
+              <div className="value">{fmtNum(Math.round(reliquat), 0)} FCFA</div>
+            </div>
+            <div className="item">
+              <div className="label">Réparti en nouvelles parts entre</div>
+              <div className="value">
+                {membresRestants > 0
+                  ? `${membresRestants} membre${membresRestants > 1 ? 's' : ''} (${fmtNum(partsParMembre, 4)} part${partsParMembre >= 2 ? 's' : ''} chacun)`
+                  : 'aucun autre membre'}
+              </div>
+            </div>
           </div>
-          <div className="item">
-            <div className="label">Pénalité ({fmtPct(taux, 0)}, {fmtNum(years, 1)} an{years >= 2 ? 's' : ''})</div>
-            <div className="value neg">-{fmtNum(penalite, 0)}</div>
-          </div>
-          <div className="item">
-            <div className="label">Montant net à verser</div>
-            <div className="value pos">{fmtNum(net, 0)} FCFA</div>
-          </div>
-        </div>
-      );
+        );
+      }
     }
   }
 
@@ -158,6 +210,18 @@ export default function RetraitForm({
           step="any"
           value={partsWanted}
           onChange={(e) => setPartsWanted(e.target.value)}
+        />
+      </label>
+      <label>
+        Frais réels du retrait (FCFA, optionnel)
+        <input
+          type="number"
+          name="fraisReels"
+          min={0}
+          step="1"
+          value={fraisReelsStr}
+          onChange={(e) => setFraisReelsStr(e.target.value)}
+          placeholder="0"
         />
       </label>
       <div style={{ gridColumn: '1/-1' }}>{preview}</div>
