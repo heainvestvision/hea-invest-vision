@@ -8,13 +8,16 @@ interface EvolutionPoint {
   date: string;
   value: number;
   depot?: number;
+  depotLabel?: string | null;
   retrait?: number;
 }
 
 // Graphique en ligne (SVG pur, sans dépendance externe) pour visualiser l'évolution
 // d'une série dans le temps — VL par part par défaut. Les points sont colorés en vert
-// quand un dépôt a été souscrit ce jour-là et en rouge quand un retrait a eu lieu, et
-// un survol de la souris affiche la date et la valeur exacte au-dessus du graphique.
+// quand un vrai événement de déploiement de capital a eu lieu dans le compte-titres ce
+// jour-là (pas une simple date de dépôt individuel coïncidant par hasard avec une
+// valorisation) et en rouge quand un retrait a eu lieu, et un survol de la souris
+// affiche la date et la valeur exacte au-dessus du graphique.
 export default function EvolutionChart({
   data,
   decimals = 0,
@@ -98,7 +101,9 @@ export default function EvolutionChart({
           {suffix}
         </span>
         {!!active.depot && (
-          <span className="chart-readout-tag pos">Dépôt +{fmtNum(active.depot, 0)} FCFA</span>
+          <span className="chart-readout-tag pos">
+            {active.depotLabel || 'Déploiement de capital'} +{fmtNum(active.depot, 0)} FCFA
+          </span>
         )}
         {!!active.retrait && (
           <span className="chart-readout-tag neg">Retrait -{fmtNum(active.retrait, 0)} FCFA</span>
@@ -176,7 +181,7 @@ export default function EvolutionChart({
       </svg>
       <div className="chart-legend">
         <span>
-          <i className="dot" style={{ background: 'var(--positive)' }} /> Dépôt souscrit
+          <i className="dot" style={{ background: 'var(--positive)' }} /> Déploiement de capital
         </span>
         <span>
           <i className="dot" style={{ background: 'var(--negative)' }} /> Retrait
