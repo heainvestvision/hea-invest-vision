@@ -11,6 +11,7 @@ const ADMIN_TABS = [
   { href: '/avis', label: 'Avis de souscription' },
   { href: '/rapport', label: 'Rapports individuels' },
   { href: '/historique', label: 'Historique' },
+  { href: '/parametres', label: 'Paramètres' },
 ];
 
 const MEMBRE_TABS = [
