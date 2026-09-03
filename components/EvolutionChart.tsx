@@ -10,6 +10,7 @@ interface EvolutionPoint {
   depot?: number;
   depotLabel?: string | null;
   retrait?: number;
+  retraitLabel?: string | null;
 }
 
 // Graphique en ligne (SVG pur, sans dépendance externe) pour visualiser l'évolution
@@ -106,7 +107,9 @@ export default function EvolutionChart({
           </span>
         )}
         {!!active.retrait && (
-          <span className="chart-readout-tag neg">Retrait -{fmtNum(active.retrait, 0)} FCFA</span>
+          <span className="chart-readout-tag neg">
+            {active.retraitLabel || 'Retrait'} -{fmtNum(active.retrait, 0)} FCFA
+          </span>
         )}
       </div>
       <svg
