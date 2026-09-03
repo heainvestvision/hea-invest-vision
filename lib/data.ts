@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { computeEngine, type EngineResult } from '@/lib/engine';
 import type { EcritureJournal, Membre, Parametres, Valorisation } from '@/lib/types';
 
@@ -71,6 +71,39 @@ export async function loadEngine(): Promise<{
       supabase.from('valorisations').select('*'),
       supabase.from('parametres').select('*').eq('id', 1).single(),
       supabase.from('membres_public').select('*'),
+    ]);
+
+  if (eJournal) throw eJournal;
+  if (eValor) throw eValor;
+  if (eParam) throw eParam;
+  if (eMembres) throw eMembres;
+
+  const parametres = normalizeParametres(parametresRows as Record<string, unknown>);
+  const journalNorm = normalizeJournal((journal ?? []) as Record<string, unknown>[]);
+  const valorisationsNorm = normalizeValorisations((valorisations ?? []) as Record<string, unknown>[]);
+  const engine = computeEngine(journalNorm, valorisationsNorm, parametres);
+
+  return { engine, membres: (membres ?? []) as Membre[], parametres };
+}
+
+// Variante de loadEngine() pour les contextes sans utilisateur connecté (ex: la
+// route cron d'envoi mensuel automatique, appelée directement par Vercel — pas
+// de cookie de session, donc pas d'auth.uid() pour la RLS). Utilise le client
+// admin (clé de service, contourne la RLS) et lit la table `membres` complète
+// (pas la vue membres_public) pour avoir accès à l'email de chacun.
+export async function loadEngineAdmin(): Promise<{
+  engine: EngineResult;
+  membres: Membre[];
+  parametres: Parametres;
+}> {
+  const supabase = createAdminClient();
+
+  const [{ data: journal, error: eJournal }, { data: valorisations, error: eValor }, { data: parametresRows, error: eParam }, { data: membres, error: eMembres }] =
+    await Promise.all([
+      supabase.from('journal').select('*'),
+      supabase.from('valorisations').select('*'),
+      supabase.from('parametres').select('*').eq('id', 1).single(),
+      supabase.from('membres').select('*'),
     ]);
 
   if (eJournal) throw eJournal;
