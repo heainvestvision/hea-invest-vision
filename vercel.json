@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/monthly-reports",
       "schedule": "0 7 28-31 * *"
+    },
+    {
+      "path": "/api/cron/valorisation-reminder",
+      "schedule": "0 8 * * *"
     }
   ]
 }
