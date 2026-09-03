@@ -25,7 +25,9 @@ export default async function ValorisationsPage() {
         <p className="card-sub">
           C&rsquo;est cette saisie régulière de la valeur du portefeuille qui détermine la VL par
           part (et donc les parts attribuées aux prochaines souscriptions). Une seule valorisation
-          par date.
+          par date. Si un dépôt a été déployé ou un retrait payé depuis le compte-titres autour de
+          cette date, indique-le dans « Événement capital » (positif pour un dépôt, négatif pour un
+          retrait) — c&rsquo;est ce qui fait apparaître le repère coloré sur le graphique ci-dessus.
         </p>
         <form action={ajouterValorisation} className="entry-form">
           <label>
@@ -37,7 +39,7 @@ export default async function ValorisationsPage() {
             <input type="number" name="valeur_portefeuille" min={0} step="0.01" required />
           </label>
           <label>
-            Événement capital (FCFA, optionnel)
+            Événement capital (FCFA, optionnel — négatif si retrait)
             <input type="number" name="evenement_capital" step="0.01" />
           </label>
           <label>
