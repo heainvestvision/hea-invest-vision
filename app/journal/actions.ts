@@ -2,7 +2,7 @@
 
 import { requireAdmin } from '@/lib/current-membre';
 import { createClient } from '@/lib/supabase/server';
-import { loadEngine } from '@/lib/data';
+import { loadEngine, titleCase } from '@/lib/data';
 import { computePenalite } from '@/lib/engine';
 import { revalidatePath } from 'next/cache';
 
@@ -140,6 +140,22 @@ export async function souscrirePending(formData: FormData) {
 // selon l'ancienneté du premier dépôt (voir computePenalite dans lib/engine.ts, mêmes
 // paliers que le prototype), et le montant net est versé immédiatement — contrairement
 // aux dépôts, un retrait n'attend pas de souscription groupée.
+//
+// Un seul retrait génère en réalité plusieurs écritures, pour que l'argent soit
+// traçable de bout en bout dans le journal :
+//  1. Le retrait lui-même (parts et montant net en négatif, imputés au membre).
+//  2. Une sortie du compte-titres vers la caisse, pour le montant net ET les frais
+//     réels engagés (virement, déplacement...) — c'est de là que vient réellement
+//     l'argent, pas de la caisse elle-même qui n'a normalement pas ces sommes
+//     disponibles puisqu'elles sont investies.
+//  3. Si des frais réels ont été engagés, une écriture qui les impute (négatif).
+//  4. Le reliquat de la pénalité (pénalité retenue moins les frais réels) n'est pas
+//     versé à qui que ce soit : il est reconverti en nouvelles parts, réparties à
+//     parts strictement égales entre tous les autres membres encore présents dans
+//     le club (une écriture "Attribution" par membre, montant = 0 — un gain pur,
+//     sans coût en capital pour eux). C'est ce qui compense concrètement les membres
+//     restants pour la sortie anticipée d'un des leurs, au lieu de rester dilué et
+//     invisible dans la VL de tout le monde.
 export async function ajouterRetrait(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
@@ -147,7 +163,9 @@ export async function ajouterRetrait(formData: FormData) {
   const membre_id = String(formData.get('membre_id'));
   const date = String(formData.get('date'));
   const parts = Number(formData.get('parts'));
+  const fraisReels = Math.round(Number(formData.get('fraisReels')) || 0);
   if (!membre_id || !date || !parts || parts <= 0) return;
+  if (fraisReels < 0) throw new Error('Les frais réels ne peuvent pas être négatifs.');
 
   const { engine, membres, parametres } = await loadEngine();
   const membre = membres.find((m) => m.id === membre_id);
@@ -163,23 +181,91 @@ export async function ajouterRetrait(formData: FormData) {
 
   const { taux } = computePenalite(date, membre.date_1er_depot ?? date, parametres);
   const valeurBrute = parts * engine.totals.vlPart;
-  const montantNet = Math.round(valeurBrute - valeurBrute * taux);
+  const penalite = valeurBrute * taux;
 
-  const { error } = await supabase.from('journal').insert({
-    membre_id,
-    date,
-    montant: -montantNet,
-    type: 'Retrait',
-    moyen: 'Virement',
-    vague: '-',
-    parts: -parts,
-    date_effective: date,
-    frais_impute: 0,
-  });
+  if (fraisReels > penalite + 1e-6) {
+    throw new Error(
+      `Les frais réels (${fraisReels.toLocaleString('fr-FR')} FCFA) ne peuvent pas dépasser la pénalité retenue ` +
+        `(${Math.round(penalite).toLocaleString('fr-FR')} FCFA).`
+    );
+  }
+
+  const montantNet = Math.round(valeurBrute - penalite);
+  const reliquat = penalite - fraisReels;
+
+  const nomMembre = titleCase(membre.nom);
+  const rows: Record<string, unknown>[] = [
+    {
+      membre_id,
+      date,
+      montant: -montantNet,
+      type: 'Retrait',
+      moyen: 'Virement',
+      vague: '-',
+      parts: -parts,
+      date_effective: date,
+      frais_impute: 0,
+    },
+    {
+      membre_id: null,
+      libelle_interne: `Sortie du compte-titres (retrait de ${nomMembre})`,
+      date,
+      montant: montantNet + fraisReels,
+      type: 'Mouvement interne',
+      moyen: 'Caisse',
+      vague: '-',
+      parts: 0,
+      date_effective: date,
+      frais_impute: 0,
+    },
+  ];
+
+  if (fraisReels > 0) {
+    rows.push({
+      membre_id: null,
+      libelle_interne: `Frais de retrait (${nomMembre})`,
+      date,
+      montant: -fraisReels,
+      type: 'Mouvement interne',
+      moyen: 'Caisse',
+      vague: '-',
+      parts: 0,
+      date_effective: date,
+      frais_impute: 0,
+    });
+  }
+
+  const membresRestants = engine.capTable.filter((c) => c.membre_id !== membre_id && c.parts > 1e-9);
+  let partsParMembre = 0;
+  if (reliquat > 0 && membresRestants.length > 0) {
+    partsParMembre = reliquat / engine.totals.vlPart / membresRestants.length;
+    for (const m of membresRestants) {
+      rows.push({
+        membre_id: m.membre_id,
+        libelle_interne: null,
+        date,
+        montant: 0,
+        type: 'Attribution',
+        moyen: null,
+        vague: '-',
+        parts: partsParMembre,
+        date_effective: date,
+        frais_impute: 0,
+      });
+    }
+  }
+
+  const { error } = await supabase.from('journal').insert(rows);
   if (error) throw error;
 
   await logHistorique(
-    `Retrait de ${parts.toLocaleString('fr-FR')} parts (${montantNet.toLocaleString('fr-FR')} FCFA net) — ${membre.nom} — ${date}`,
+    `Retrait de ${parts.toLocaleString('fr-FR')} parts (${montantNet.toLocaleString('fr-FR')} FCFA net) — ${nomMembre} — ${date}` +
+      (fraisReels > 0 ? ` — frais réels ${fraisReels.toLocaleString('fr-FR')} FCFA` : '') +
+      (reliquat > 0
+        ? membresRestants.length > 0
+          ? ` — reliquat ${Math.round(reliquat).toLocaleString('fr-FR')} FCFA réparti en ${partsParMembre.toFixed(4)} part(s) chacun entre ${membresRestants.length} membre(s) restant(s)`
+          : ` — reliquat ${Math.round(reliquat).toLocaleString('fr-FR')} FCFA non réparti (aucun autre membre)`
+        : ''),
     'Ajout'
   );
 
