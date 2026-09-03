@@ -73,7 +73,12 @@ export default async function JournalPage() {
         <h2>Enregistrer un retrait</h2>
         <p className="card-sub">
           La pénalité est calculée automatiquement selon l&rsquo;ancienneté du premier dépôt du
-          membre. Le montant net est versé immédiatement, sans file d&rsquo;attente.
+          membre. Le montant net est versé immédiatement, sans file d&rsquo;attente. Si des frais
+          réels sont engagés pour l&rsquo;exécuter (virement, déplacement...), indique-les : ils
+          sont prélevés sur la pénalité, jamais sur le montant du membre. Ce qui reste de la
+          pénalité est automatiquement réparti en nouvelles parts, à parts égales, entre tous les
+          autres membres du club. Pense aussi à renseigner un événement capital négatif sur la
+          prochaine valorisation, pour que ce retrait apparaisse sur le graphique.
         </p>
         <RetraitForm
           membres={membres.map((m) => ({ id: m.id, nom: m.nom, date_1er_depot: m.date_1er_depot }))}
