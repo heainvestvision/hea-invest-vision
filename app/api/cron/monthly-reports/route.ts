@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { loadEngineAdmin } from '@/lib/data';
-import { fmtDate, titleCase } from '@/lib/format';
-import { buildRapportPdf } from '@/lib/pdf';
-import { sendPdfEmail } from '@/lib/email';
-import { createAdminClient } from '@/lib/supabase/server';
-import type { Membre } from '@/lib/types';
+import { envoyerTousLesRapports } from '@/lib/monthly-reports';
 
 export const maxDuration = 60;
 
@@ -33,54 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ skipped: true, reason: "Pas le dernier jour du mois." });
   }
 
-  const { engine, membres } = await loadEngineAdmin();
-  const destinataires = (membres as Membre[]).filter((m) => !!m.email);
-
-  const resultats: { membre: string; ok: boolean; erreur?: string }[] = [];
-
-  for (const membre of destinataires) {
-    try {
-      const capRow = engine.capTable.find((c) => c.membre_id === membre.id) ?? null;
-      const mouvements = engine.journal
-        .filter((e) => e.membre_id === membre.id)
-        .sort((a, b) => b.date.localeCompare(a.date));
-      const rangIndex = engine.capTable.findIndex((c) => c.membre_id === membre.id);
-      const rang = rangIndex === -1 ? null : { position: rangIndex + 1, total: engine.capTable.length };
-
-      const pdfBuffer = buildRapportPdf({ membre, capRow, totals: engine.totals, mouvements, rang });
-
-      await sendPdfEmail({
-        to: membre.email!,
-        subject: `HEA Invest Vision — Votre rapport individuel au ${fmtDate(engine.totals.dateArrete)}`,
-        bodyText:
-          `Bonjour ${titleCase(membre.nom)},\n\n` +
-          `Veuillez trouver ci-joint votre rapport individuel HEA Invest Vision, arrêté au ` +
-          `${fmtDate(engine.totals.dateArrete)}.\n\n` +
-          `Ceci est un envoi automatique mensuel.\n\n` +
-          `Cordialement,\nHEA Invest Vision`,
-        pdfBuffer,
-        pdfFilename: `rapport-${membre.nom.replace(/\s+/g, '-').toLowerCase()}.pdf`,
-      });
-      resultats.push({ membre: membre.nom, ok: true });
-    } catch (e) {
-      resultats.push({
-        membre: membre.nom,
-        ok: false,
-        erreur: e instanceof Error ? e.message : 'Erreur inconnue',
-      });
-    }
-  }
-
-  const nbOk = resultats.filter((r) => r.ok).length;
-  const admin = createAdminClient();
-  await admin.from('historique').insert({
-    action: 'Envoi automatique',
-    detail: `Rapports individuels mensuels envoyés — ${nbOk}/${resultats.length} réussi(s)` +
-      (nbOk < resultats.length
-        ? ` (échecs : ${resultats.filter((r) => !r.ok).map((r) => r.membre).join(', ')})`
-        : ''),
-    actor_id: null,
-  });
+  const { resultats, nbOk } = await envoyerTousLesRapports('Automatique', null);
 
   return NextResponse.json({ ok: true, envoyes: nbOk, total: resultats.length, resultats });
 }
