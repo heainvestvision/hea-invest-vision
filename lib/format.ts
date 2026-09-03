@@ -25,22 +25,37 @@ export function titleCase(s: string): string {
     .join(' ');
 }
 
-// Prépare les points du graphique d'évolution de la VL par part, en signalant
-// pour chaque date de valorisation un vrai événement de déploiement de capital
-// dans le compte-titres (evenement_capital / type_evenement sur la ligne de
-// valorisation elle-même — PAS une date de dépôt individuelle d'un membre, qui
-// peut coïncider par hasard avec une date de valorisation sans qu'aucun virement
-// réel n'ait eu lieu ce jour-là vers le compte-titres) et/ou un retrait effectué
-// ce jour-là (utilisé pour colorer les points sur le graphique).
+// Prépare les points du graphique d'évolution de la VL par part, en signalant pour
+// chaque date de valorisation un vrai événement de capital dans le compte-titres —
+// positif (evenement_capital > 0) pour un dépôt/déploiement, négatif pour un retrait
+// — via le champ evenement_capital / type_evenement de la ligne de valorisation
+// elle-même. On ne se base plus du tout sur les dates individuelles des écritures du
+// journal (dépôt ou retrait) : ces dates peuvent coïncider par hasard avec une date
+// de valorisation sans qu'aucun mouvement réel n'ait eu lieu ce jour-là dans le
+// compte-titres — seule la ligne de valorisation, saisie et confirmée par l'admin,
+// fait foi.
 export function buildVlEvolution(
   engine: EngineResult
-): { date: string; value: number; depot: number; depotLabel: string | null; retrait: number }[] {
+): {
+  date: string;
+  value: number;
+  depot: number;
+  depotLabel: string | null;
+  retrait: number;
+  retraitLabel: string | null;
+}[] {
   const valorisations = [...engine.valorisations].sort((a, b) => a.date.localeCompare(b.date));
   return valorisations.map((v) => {
-    const depot = v.evenement_capital && v.evenement_capital > 0 ? v.evenement_capital : 0;
-    const retrait = engine.journal
-      .filter((e) => e.type === 'Retrait' && e.date_effective === v.date)
-      .reduce((s, e) => s + Math.abs(e.montant), 0);
-    return { date: v.date, value: v.vl_part, depot, depotLabel: depot > 0 ? v.type_evenement : null, retrait };
+    const evt = v.evenement_capital ?? 0;
+    const depot = evt > 0 ? evt : 0;
+    const retrait = evt < 0 ? Math.abs(evt) : 0;
+    return {
+      date: v.date,
+      value: v.vl_part,
+      depot,
+      depotLabel: depot > 0 ? v.type_evenement : null,
+      retrait,
+      retraitLabel: retrait > 0 ? v.type_evenement : null,
+    };
   });
 }
