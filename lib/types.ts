@@ -1,7 +1,9 @@
 // Types partagés — reflètent les tables Supabase définies dans
-// supabase/migrations/0001_init.sql
+// supabase/migrations/0001_init.sql (et 0003_type_attribution.sql pour 'Attribution')
 
-export type TypeEcriture = 'Dépôt' | 'Retrait' | 'Mouvement interne';
+// 'Attribution' = parts créditées gratuitement à un membre (montant = 0), utilisé
+// pour redistribuer le reliquat de pénalité d'un retrait entre les membres restants.
+export type TypeEcriture = 'Dépôt' | 'Retrait' | 'Mouvement interne' | 'Attribution';
 
 export interface Membre {
   id: string;
