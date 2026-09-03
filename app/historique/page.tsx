@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/current-membre';
 import { createClient } from '@/lib/supabase/server';
 import { fmtDate, titleCase } from '@/lib/data';
 import Shell from '@/components/Shell';
+import EnvoyerRapportsButton from '@/components/EnvoyerRapportsButton';
 import type { HistoriqueEntry } from '@/lib/types';
 
 // Journal d'activité admin : qui a fait quoi et quand (ajout d'un dépôt, suppression
@@ -29,11 +30,22 @@ export default async function HistoriquePage() {
   return (
     <Shell membre={membre} active="/historique">
       <div className="card">
+        <h2>Envoi des rapports individuels</h2>
+        <p className="card-sub">
+          Envoyé automatiquement à tous les membres le dernier jour de chaque mois (voir plus bas
+          pour vérifier que ça s&rsquo;est bien passé). Le bouton ci-dessous déclenche un envoi
+          immédiat, en dehors de ce cycle — utile pour un cas exceptionnel, ou pour tester tout de
+          suite que l&rsquo;envoi fonctionne sans attendre la fin du mois.
+        </p>
+        <EnvoyerRapportsButton />
+      </div>
+
+      <div className="card">
         <h2>Historique d&rsquo;activité admin</h2>
         <p className="card-sub">
           Qui a fait quoi et quand — ajouts, suppressions, souscriptions, envois d&rsquo;emails
-          (y compris l&rsquo;envoi automatique mensuel des rapports individuels, marqué
-          « Automatique »). Les 200 entrées les plus récentes.
+          (« Envoi automatique » = envoyé tout seul le dernier jour du mois ; « Envoi manuel » =
+          déclenché avec le bouton ci-dessus). Les 200 entrées les plus récentes.
         </p>
         <div className="table-wrap">
           <table>
