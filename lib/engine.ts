@@ -62,11 +62,13 @@ export function computeEngine(
   }));
 
   journal.forEach((e) => {
-    if (e.type !== 'Dépôt' && e.type !== 'Retrait') {
+    if (e.type !== 'Dépôt' && e.type !== 'Retrait' && e.type !== 'Attribution') {
       e.parts_calculees = 0;
       return;
     }
-    if (e.type === 'Retrait') {
+    if (e.type === 'Retrait' || e.type === 'Attribution') {
+      // Les parts sont fixées directement (pas dérivées de la VL comme un Dépôt) :
+      // pour un Retrait elles sont déjà négatives, pour une Attribution positives.
       e.parts_calculees = e.parts ?? 0;
       return;
     }
@@ -118,7 +120,14 @@ export function computeEngine(
       .filter((e) => e.type === 'Retrait' && e.date_effective !== null && e.date_effective <= d)
       .reduce((s, e) => s + (e.parts_calculees || 0), 0);
 
-    const partsCirc = partsInitiales + postSum + retraitSum;
+    // Parts créées par attribution (reliquat de pénalité redistribué aux membres
+    // restants lors d'un retrait — voir ajouterRetrait) : elles s'ajoutent bien aux
+    // parts en circulation, exactement comme un dépôt ou un retrait.
+    const attributionSum = journal
+      .filter((e) => e.type === 'Attribution' && e.date_effective !== null && e.date_effective <= d)
+      .reduce((s, e) => s + (e.parts_calculees || 0), 0);
+
+    const partsCirc = partsInitiales + postSum + retraitSum + attributionSum;
     const vl = row.valeur_portefeuille / partsCirc;
     results.push({ ...row, parts_circulation: partsCirc, vl_part: vl });
     prevVl = vl;
@@ -148,7 +157,7 @@ export function computeEngine(
   const byMember = new Map<string, { capital: number; parts: number }>();
   for (const e of journal) {
     if (
-      (e.type === 'Dépôt' || e.type === 'Retrait') &&
+      (e.type === 'Dépôt' || e.type === 'Retrait' || e.type === 'Attribution') &&
       e.membre_id &&
       e.parts_calculees !== null
     ) {
