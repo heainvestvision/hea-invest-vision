@@ -54,4 +54,5 @@ export interface HistoriqueEntry {
   ts: string;
   action: string;
   detail: string;
+  actor_id: string | null; // null = action automatique (ex: envoi cron mensuel)
 }
