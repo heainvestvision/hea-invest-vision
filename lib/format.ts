@@ -26,19 +26,21 @@ export function titleCase(s: string): string {
 }
 
 // Prépare les points du graphique d'évolution de la VL par part, en signalant
-// pour chaque date de valorisation si un dépôt a été souscrit et/ou un retrait
-// effectué ce jour-là (utilisé pour colorer les points sur le graphique).
+// pour chaque date de valorisation un vrai événement de déploiement de capital
+// dans le compte-titres (evenement_capital / type_evenement sur la ligne de
+// valorisation elle-même — PAS une date de dépôt individuelle d'un membre, qui
+// peut coïncider par hasard avec une date de valorisation sans qu'aucun virement
+// réel n'ait eu lieu ce jour-là vers le compte-titres) et/ou un retrait effectué
+// ce jour-là (utilisé pour colorer les points sur le graphique).
 export function buildVlEvolution(
   engine: EngineResult
-): { date: string; value: number; depot: number; retrait: number }[] {
+): { date: string; value: number; depot: number; depotLabel: string | null; retrait: number }[] {
   const valorisations = [...engine.valorisations].sort((a, b) => a.date.localeCompare(b.date));
   return valorisations.map((v) => {
-    const depot = engine.journal
-      .filter((e) => e.type === 'Dépôt' && e.date_effective === v.date)
-      .reduce((s, e) => s + e.montant, 0);
+    const depot = v.evenement_capital && v.evenement_capital > 0 ? v.evenement_capital : 0;
     const retrait = engine.journal
       .filter((e) => e.type === 'Retrait' && e.date_effective === v.date)
       .reduce((s, e) => s + Math.abs(e.montant), 0);
-    return { date: v.date, value: v.vl_part, depot, retrait };
+    return { date: v.date, value: v.vl_part, depot, depotLabel: depot > 0 ? v.type_evenement : null, retrait };
   });
 }
