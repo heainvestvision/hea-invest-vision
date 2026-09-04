@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'crypto';
 import { requireAdmin } from '@/lib/current-membre';
 import { createClient } from '@/lib/supabase/server';
 import { loadEngine, titleCase } from '@/lib/data';
@@ -194,6 +195,10 @@ export async function ajouterRetrait(formData: FormData) {
   const reliquat = penalite - fraisReels;
 
   const nomMembre = titleCase(membre.nom);
+  // Toutes les écritures ci-dessous appartiennent à la même opération : elles
+  // partagent un groupe_id commun pour pouvoir être supprimées ensemble en un clic
+  // (voir supprimerGroupe ci-dessous) si ce retrait doit être annulé.
+  const groupeId = randomUUID();
   const rows: Record<string, unknown>[] = [
     {
       membre_id,
@@ -205,6 +210,7 @@ export async function ajouterRetrait(formData: FormData) {
       parts: -parts,
       date_effective: date,
       frais_impute: 0,
+      groupe_id: groupeId,
     },
     {
       membre_id: null,
@@ -217,6 +223,7 @@ export async function ajouterRetrait(formData: FormData) {
       parts: 0,
       date_effective: date,
       frais_impute: 0,
+      groupe_id: groupeId,
     },
   ];
 
@@ -232,6 +239,7 @@ export async function ajouterRetrait(formData: FormData) {
       parts: 0,
       date_effective: date,
       frais_impute: 0,
+      groupe_id: groupeId,
     });
   }
 
@@ -251,6 +259,7 @@ export async function ajouterRetrait(formData: FormData) {
         parts: partsParMembre,
         date_effective: date,
         frais_impute: 0,
+        groupe_id: groupeId,
       });
     }
   }
@@ -268,6 +277,163 @@ export async function ajouterRetrait(formData: FormData) {
         : ''),
     'Ajout'
   );
+
+  revalidatePath('/journal');
+  revalidatePath('/');
+  revalidatePath('/captable');
+  revalidatePath('/rapport');
+}
+
+// Enregistre un transfert de titre : un membre (le cédant) cède tout ou partie de
+// ses parts à un autre membre (le receveur, déjà présent dans le club ou nouveau —
+// sa fiche est alors créée à la volée). Contrairement à un retrait, rien ne sort du
+// compte-titres et aucune pénalité ne s'applique : les parts changent juste de
+// propriétaire, à l'intérieur du fonds.
+//
+// Le coût d'acquisition (utilisé pour calculer la plus-value de chacun) est
+// transmis au prorata : le cédant garde son coût moyen actuel par part
+// (capital / parts, tel que retourné par la cap table), et cède au receveur ce
+// coût moyen multiplié par les parts transférées. Le total capital du fonds ne
+// change pas (ce qui sort de l'un entre exactement chez l'autre) — voir
+// caisseTotal dans lib/engine.ts qui exclut ce montant de la trésorerie, puisque
+// aucun argent réel ne bouge.
+//
+// Le prix indicatif éventuellement saisi (ce que le receveur paie au cédant) n'est
+// enregistré qu'à titre informatif dans l'historique : cet argent passe entre les
+// deux membres, jamais par la caisse du club.
+export async function ajouterTransfert(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const cedantId = String(formData.get('cedant_id'));
+  const date = String(formData.get('date'));
+  const parts = Number(formData.get('parts'));
+  const modeReceveur = String(formData.get('modeReceveur'));
+  const prixIndicatif = Math.round(Number(formData.get('prixIndicatif')) || 0);
+
+  if (!cedantId || !date || !parts || parts <= 0) return;
+  if (prixIndicatif < 0) throw new Error('Le prix indicatif ne peut pas être négatif.');
+
+  const { engine, membres } = await loadEngine();
+  const cedant = membres.find((m) => m.id === cedantId);
+  const capRowCedant = engine.capTable.find((c) => c.membre_id === cedantId);
+  const partsCedant = capRowCedant?.parts ?? 0;
+  const capitalCedant = capRowCedant?.capital ?? 0;
+
+  if (!cedant) throw new Error('Membre cédant introuvable.');
+  if (parts > partsCedant + 1e-9) {
+    throw new Error(
+      `Transfert impossible : ${parts.toLocaleString('fr-FR')} parts demandées, maximum disponible ${partsCedant.toLocaleString('fr-FR')} parts.`
+    );
+  }
+
+  const coutParPart = partsCedant > 0 ? capitalCedant / partsCedant : 0;
+  const coutTransfere = Math.round(parts * coutParPart);
+
+  let receveurId: string;
+  let nomReceveur: string;
+
+  if (modeReceveur === 'nouveau') {
+    const nom = String(formData.get('nouveauNom') || '').trim().toUpperCase();
+    const prenom = String(formData.get('nouveauPrenom') || '').trim() || null;
+    const email = String(formData.get('nouveauEmail') || '').trim() || null;
+    if (!nom) throw new Error('Le nom du nouveau membre est requis.');
+
+    const { data: maxNumRow } = await supabase
+      .from('membres')
+      .select('num')
+      .order('num', { ascending: false })
+      .limit(1)
+      .single();
+    const nextNum = (maxNumRow?.num ?? 0) + 1;
+
+    const { data: nouveauMembre, error: eCreate } = await supabase
+      .from('membres')
+      .insert({ nom, prenom, email, num: nextNum, date_1er_depot: date, is_admin: false })
+      .select('id, nom')
+      .single();
+    if (eCreate) throw eCreate;
+    receveurId = nouveauMembre.id;
+    nomReceveur = titleCase(nouveauMembre.nom);
+  } else {
+    receveurId = String(formData.get('receveur_id'));
+    if (!receveurId) throw new Error('Membre receveur introuvable.');
+    if (receveurId === cedantId) throw new Error('Le cédant et le receveur doivent être différents.');
+    const receveur = membres.find((m) => m.id === receveurId);
+    if (!receveur) throw new Error('Membre receveur introuvable.');
+    nomReceveur = titleCase(receveur.nom);
+  }
+
+  const groupeId = randomUUID();
+  const nomCedant = titleCase(cedant.nom);
+
+  const rows: Record<string, unknown>[] = [
+    {
+      membre_id: cedantId,
+      date,
+      montant: -coutTransfere,
+      type: 'Transfert',
+      moyen: null,
+      vague: '-',
+      parts: -parts,
+      date_effective: date,
+      frais_impute: 0,
+      groupe_id: groupeId,
+    },
+    {
+      membre_id: receveurId,
+      date,
+      montant: coutTransfere,
+      type: 'Transfert',
+      moyen: null,
+      vague: '-',
+      parts,
+      date_effective: date,
+      frais_impute: 0,
+      groupe_id: groupeId,
+    },
+  ];
+
+  const { error } = await supabase.from('journal').insert(rows);
+  if (error) throw error;
+
+  await logHistorique(
+    `Transfert de ${parts.toLocaleString('fr-FR')} parts de ${nomCedant} vers ${nomReceveur} — ${date} — coût transféré ${coutTransfere.toLocaleString('fr-FR')} FCFA` +
+      (prixIndicatif > 0
+        ? ` — prix indicatif convenu entre eux : ${prixIndicatif.toLocaleString('fr-FR')} FCFA (non comptabilisé dans le club)`
+        : ''),
+    'Ajout'
+  );
+
+  revalidatePath('/journal');
+  revalidatePath('/');
+  revalidatePath('/captable');
+  revalidatePath('/rapport');
+  revalidatePath('/membres');
+}
+
+// Supprime en une seule fois toutes les écritures partageant un même groupe_id —
+// c'est-à-dire toutes celles issues d'une seule opération multi-lignes (un retrait
+// ou un transfert). Nécessaire parce que supprimer ces écritures une par une avec
+// supprimerEcriture laisserait les comptes déséquilibrés entre deux suppressions
+// (ex : le retrait supprimé mais pas la sortie compte-titres correspondante).
+export async function supprimerGroupe(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const groupeId = String(formData.get('groupe_id'));
+  if (!groupeId) return;
+
+  const { data: entries } = await supabase.from('journal').select('*').eq('groupe_id', groupeId);
+  const { error } = await supabase.from('journal').delete().eq('groupe_id', groupeId);
+  if (error) throw error;
+
+  if (entries && entries.length > 0) {
+    await logHistorique(
+      `Groupe de ${entries.length} écritures liées supprimé (${entries[0].type}) — ${entries[0].date}`,
+      'Suppression'
+    );
+  }
 
   revalidatePath('/journal');
   revalidatePath('/');

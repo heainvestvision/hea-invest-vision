@@ -3,6 +3,8 @@ import { loadEngine, fmtNum, fmtDate, titleCase } from '@/lib/data';
 import Shell from '@/components/Shell';
 import SouscriptionForm from '@/components/SouscriptionForm';
 import RetraitForm from '@/components/RetraitForm';
+import TransfertForm from '@/components/TransfertForm';
+import SupprimerGroupeButton from '@/components/SupprimerGroupeButton';
 import { ajouterDepot, ajouterMouvement, supprimerEcriture } from './actions';
 
 export default async function JournalPage() {
@@ -14,10 +16,19 @@ export default async function JournalPage() {
     nomByIdObj[m.id] = titleCase(m.nom);
   });
   const partsById: Record<string, number> = {};
+  const capitalById: Record<string, number> = {};
   engine.capTable.forEach((c) => {
     partsById[c.membre_id] = c.parts;
+    capitalById[c.membre_id] = c.capital;
   });
   const rows = [...engine.journal].sort((a, b) => b.date.localeCompare(a.date));
+
+  // Nombre d'écritures par groupe (retrait ou transfert), pour le libellé de
+  // confirmation du bouton de suppression groupée.
+  const groupeCounts = new Map<string, number>();
+  rows.forEach((e) => {
+    if (e.groupe_id) groupeCounts.set(e.groupe_id, (groupeCounts.get(e.groupe_id) ?? 0) + 1);
+  });
 
   return (
     <Shell membre={membre} active="/journal">
@@ -89,7 +100,23 @@ export default async function JournalPage() {
       </div>
 
       <div className="card">
-        <h2 className="section-bar" style={{ margin: '-20px -22px 16px', borderRadius: '14px 14px 0 0' }}>Mouvement interne (frais, réserve, transfert)</h2>
+        <h2>Transfert de titre entre membres</h2>
+        <p className="card-sub">
+          Un membre cède tout ou partie de ses parts à un autre — déjà présent dans le club, ou
+          nouveau (sa fiche est créée automatiquement). Aucune pénalité, rien ne sort du
+          compte-titres : les parts changent juste de propriétaire, avec leur coût d&rsquo;acquisition
+          transmis au prorata. Le prix indicatif est purement informatif, il n&rsquo;affecte pas la
+          caisse du club.
+        </p>
+        <TransfertForm
+          membres={membres.map((m) => ({ id: m.id, nom: m.nom }))}
+          partsById={partsById}
+          capitalById={capitalById}
+        />
+      </div>
+
+      <div className="card">
+        <h2 className="section-bar" style={{ margin: '-20px -22px 16px', borderRadius: '14px 14px 0 0' }}>Mouvement interne (frais, réserve, transfert de caisse)</h2>
         <form action={ajouterMouvement} className="entry-form">
           <label>
             Libellé
@@ -131,10 +158,17 @@ export default async function JournalPage() {
                   <td>{e.vague ?? '—'}</td>
                   <td className="num">{e.parts_calculees !== null ? fmtNum(e.parts_calculees, 2) : '—'}</td>
                   <td>
-                    <form action={supprimerEcriture}>
-                      <input type="hidden" name="id" value={e.id} />
-                      <button type="submit" className="ghost" style={{ padding: '4px 9px', fontSize: 11 }}>Supprimer</button>
-                    </form>
+                    {e.groupe_id ? (
+                      <SupprimerGroupeButton
+                        groupeId={e.groupe_id}
+                        resume={`les ${groupeCounts.get(e.groupe_id) ?? '?'} écritures liées à cette opération (${e.type.toLowerCase()} du ${fmtDate(e.date)})`}
+                      />
+                    ) : (
+                      <form action={supprimerEcriture}>
+                        <input type="hidden" name="id" value={e.id} />
+                        <button type="submit" className="ghost" style={{ padding: '4px 9px', fontSize: 11 }}>Supprimer</button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}
