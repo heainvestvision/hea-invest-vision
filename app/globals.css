@@ -120,6 +120,15 @@ tr.total td { font-weight: 700; background: var(--accent); color: #fff; }
 .pill.neg { background: var(--negative-bg); color: var(--negative); }
 .rank1 { color: var(--accent-ink); font-weight: 700; }
 
+.op-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.op-tab {
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-soft);
+  border-radius: 999px; padding: 7px 16px; font-weight: 600; font-size: 13px;
+  cursor: pointer; font-family: inherit;
+}
+.op-tab:hover { background: var(--surface-2); }
+.op-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 .entry-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 14px; }
 .entry-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink-soft); font-weight: 600; }
 .entry-form input, .entry-form select {
