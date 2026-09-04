@@ -62,13 +62,14 @@ export function computeEngine(
   }));
 
   journal.forEach((e) => {
-    if (e.type !== 'Dépôt' && e.type !== 'Retrait' && e.type !== 'Attribution') {
+    if (e.type !== 'Dépôt' && e.type !== 'Retrait' && e.type !== 'Attribution' && e.type !== 'Transfert') {
       e.parts_calculees = 0;
       return;
     }
-    if (e.type === 'Retrait' || e.type === 'Attribution') {
+    if (e.type === 'Retrait' || e.type === 'Attribution' || e.type === 'Transfert') {
       // Les parts sont fixées directement (pas dérivées de la VL comme un Dépôt) :
-      // pour un Retrait elles sont déjà négatives, pour une Attribution positives.
+      // négatives pour un Retrait ou pour le cédant d'un Transfert, positives pour
+      // une Attribution ou pour le receveur d'un Transfert.
       e.parts_calculees = e.parts ?? 0;
       return;
     }
@@ -127,7 +128,15 @@ export function computeEngine(
       .filter((e) => e.type === 'Attribution' && e.date_effective !== null && e.date_effective <= d)
       .reduce((s, e) => s + (e.parts_calculees || 0), 0);
 
-    const partsCirc = partsInitiales + postSum + retraitSum + attributionSum;
+    // Un transfert ne crée ni ne détruit de parts (une ligne négative chez le
+    // cédant, une positive chez le receveur, même date) : sa somme est toujours
+    // nulle. Inclus quand même explicitement, par cohérence avec les autres types
+    // et pour rester correct si cette hypothèse changeait un jour.
+    const transfertSum = journal
+      .filter((e) => e.type === 'Transfert' && e.date_effective !== null && e.date_effective <= d)
+      .reduce((s, e) => s + (e.parts_calculees || 0), 0);
+
+    const partsCirc = partsInitiales + postSum + retraitSum + attributionSum + transfertSum;
     const vl = row.valeur_portefeuille / partsCirc;
     results.push({ ...row, parts_circulation: partsCirc, vl_part: vl });
     prevVl = vl;
@@ -157,7 +166,7 @@ export function computeEngine(
   const byMember = new Map<string, { capital: number; parts: number }>();
   for (const e of journal) {
     if (
-      (e.type === 'Dépôt' || e.type === 'Retrait' || e.type === 'Attribution') &&
+      (e.type === 'Dépôt' || e.type === 'Retrait' || e.type === 'Attribution' || e.type === 'Transfert') &&
       e.membre_id &&
       e.parts_calculees !== null
     ) {
@@ -189,8 +198,14 @@ export function computeEngine(
   // Solde de caisse : chaque écriture du journal porte déjà le bon signe pour son
   // impact en caisse (dépôt +, retrait -, mouvement interne déjà signé). La somme
   // brute donne la trésorerie disponible, par opposition à la valeur du portefeuille
-  // investi (issue des valorisations).
-  const caisseTotal = journal.reduce((s, e) => s + e.montant, 0);
+  // investi (issue des valorisations). Un Transfert est exclu de cette somme : son
+  // montant (positif chez le cédant, négatif chez le receveur — voir plus haut) ne
+  // représente pas de l'argent réel qui entre ou sort du club : c'est le coût
+  // d'acquisition transmis d'un membre à l'autre (négatif chez le cédant, positif
+  // chez le receveur) pour que le calcul de leur plus-value reste juste.
+  const caisseTotal = journal
+    .filter((e) => e.type !== 'Transfert')
+    .reduce((s, e) => s + e.montant, 0);
   const caisseReserve = journal
     .filter((e) => e.type === 'Mouvement interne' && e.libelle_interne === 'Réserve')
     .reduce((s, e) => s + Math.abs(e.montant), 0);

@@ -1,9 +1,13 @@
 // Types partagés — reflètent les tables Supabase définies dans
-// supabase/migrations/0001_init.sql (et 0003_type_attribution.sql pour 'Attribution')
+// supabase/migrations/0001_init.sql (0003_type_attribution.sql pour 'Attribution',
+// 0004_transfert_et_groupe.sql pour 'Transfert' et groupe_id)
 
 // 'Attribution' = parts créditées gratuitement à un membre (montant = 0), utilisé
 // pour redistribuer le reliquat de pénalité d'un retrait entre les membres restants.
-export type TypeEcriture = 'Dépôt' | 'Retrait' | 'Mouvement interne' | 'Attribution';
+// 'Transfert' = un membre cède des parts à un autre (existant ou nouveau), sans
+// pénalité ni sortie de compte-titres — voir ajouterTransfert dans
+// app/journal/actions.ts.
+export type TypeEcriture = 'Dépôt' | 'Retrait' | 'Mouvement interne' | 'Attribution' | 'Transfert';
 
 export interface Membre {
   id: string;
@@ -29,6 +33,7 @@ export interface EcritureJournal {
   parts: number | null;         // null tant que non souscrit
   date_effective: string | null; // null = en attente de souscription
   frais_impute: number;
+  groupe_id: string | null; // partagé par les écritures issues d'une même opération multi-lignes
 }
 
 export interface Valorisation {
