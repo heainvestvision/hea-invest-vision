@@ -229,6 +229,54 @@ export function computeEngine(
   };
 }
 
+export interface MemberEvolutionPoint {
+  date: string;
+  parts: number;
+  capital: number;
+  valeur: number;
+  gain: number;
+  perf: number;
+}
+
+// Reconstitue, pour UN membre donné, l'évolution de sa propre position (parts,
+// capital investi, valeur, gain, performance) à chaque date de valorisation depuis
+// son entrée dans le club — contrairement à la cap table, qui n'est qu'une photo
+// figée à la date la plus récente. Utilisé par la page "Ma position" (la vue membre
+// de /captable) pour tracer un graphique individuel, sur le même principe que
+// buildVlEvolution pour le fonds entier. Mêmes types d'écritures et même formule de
+// capital (montant - frais_impute) que la boucle byMember de computeEngine, pour
+// que le dernier point de cette série retombe exactement sur la ligne du membre
+// dans engine.capTable.
+export function computeMemberEvolution(engine: EngineResult, membreId: string): MemberEvolutionPoint[] {
+  const entries = engine.journal.filter(
+    (e) =>
+      e.membre_id === membreId &&
+      (e.type === 'Dépôt' || e.type === 'Retrait' || e.type === 'Attribution' || e.type === 'Transfert') &&
+      e.parts_calculees !== null &&
+      e.date_effective !== null
+  );
+  if (entries.length === 0) return [];
+
+  const entryDate = entries.reduce(
+    (min, e) => (e.date_effective! < min ? e.date_effective! : min),
+    entries[0].date_effective as string
+  );
+
+  const valorisations = [...engine.valorisations]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter((v) => v.date >= entryDate);
+
+  return valorisations.map((v) => {
+    const relevant = entries.filter((e) => e.date_effective! <= v.date);
+    const parts = relevant.reduce((s, e) => s + (e.parts_calculees || 0), 0);
+    const capital = relevant.reduce((s, e) => s + (e.montant - (e.frais_impute || 0)), 0);
+    const valeur = parts * v.vl_part;
+    const gain = valeur - capital;
+    const perf = capital !== 0 ? gain / capital : 0;
+    return { date: v.date, parts, capital, valeur, gain, perf };
+  });
+}
+
 export function computePenalite(
   dateEffet: string,
   date1erDepot: string,
