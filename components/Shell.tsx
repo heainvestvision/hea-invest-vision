@@ -16,7 +16,7 @@ const ADMIN_TABS = [
 
 const MEMBRE_TABS = [
   { href: '/', label: 'Tableau de bord' },
-  { href: '/captable', label: 'Cap Table' },
+  { href: '/captable', label: 'Ma position' },
   { href: '/rapport', label: 'Mon rapport' },
 ];
 
