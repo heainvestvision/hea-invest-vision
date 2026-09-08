@@ -117,6 +117,24 @@ export function computeEngine(
       )
       .reduce((s, e) => s + (e.parts_calculees as number), 0);
 
+    // Comme postSum ci-dessus, mais pour les dépôts "Fondateur" : avant cette
+    // correction, partsCirc utilisait le paramètre fixe `partsInitiales` pour TOUTE
+    // valorisation, y compris celles antérieures à l'arrivée effective de tous les
+    // fondateurs (déploiement en plusieurs vagues vers le compte-titres). Ça gonflait
+    // artificiellement le nombre de parts en circulation — donc sous-évaluait la VL —
+    // pendant la fenêtre entre la 1re valorisation et la fin du déploiement fondateur.
+    // On additionne maintenant dynamiquement, exactement comme pour Post-fondation.
+    const fondateurSum = journal
+      .filter(
+        (e) =>
+          e.type === 'Dépôt' &&
+          e.vague === 'Fondateur' &&
+          e.parts_calculees !== null &&
+          e.date_effective !== null &&
+          e.date_effective <= d
+      )
+      .reduce((s, e) => s + (e.parts_calculees as number), 0);
+
     const retraitSum = journal
       .filter((e) => e.type === 'Retrait' && e.date_effective !== null && e.date_effective <= d)
       .reduce((s, e) => s + (e.parts_calculees || 0), 0);
@@ -136,7 +154,7 @@ export function computeEngine(
       .filter((e) => e.type === 'Transfert' && e.date_effective !== null && e.date_effective <= d)
       .reduce((s, e) => s + (e.parts_calculees || 0), 0);
 
-    const partsCirc = partsInitiales + postSum + retraitSum + attributionSum + transfertSum;
+    const partsCirc = fondateurSum + postSum + retraitSum + attributionSum + transfertSum;
     const vl = row.valeur_portefeuille / partsCirc;
     results.push({ ...row, parts_circulation: partsCirc, vl_part: vl });
     prevVl = vl;
