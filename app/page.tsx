@@ -11,6 +11,11 @@ export default async function DashboardPage() {
   const top5 = engine.capTable.slice(0, 5);
   const nomById = new Map(membres.map((m) => [m.id, titleCase(m.nom)]));
   const vlChartData = buildVlEvolution(engine);
+  // Rang du membre connecté dans le classement par capital (engine.capTable est déjà
+  // trié par capital décroissant) — utilisé à la place du détail des autres membres
+  // pour un membre non-admin (voir la carte "Ton rang" ci-dessous).
+  const rangIdx = engine.capTable.findIndex((c) => c.membre_id === membre.id);
+  const monRang = rangIdx >= 0 ? rangIdx + 1 : null;
 
   return (
     <Shell membre={membre} active="/">
@@ -39,32 +44,51 @@ export default async function DashboardPage() {
         <EvolutionChart data={vlChartData} decimals={4} />
       </div>
 
-      <div className="card">
-        <h2>Top contributeurs</h2>
-        <p className="card-sub">Classement par capital apporté</p>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Membre</th>
-                {membre.is_admin && <th className="num">Capital (FCFA)</th>}
-                <th className="num">% détention</th>
-              </tr>
-            </thead>
-            <tbody>
-              {top5.map((m, i) => (
-                <tr key={m.membre_id}>
-                  <td className={i === 0 ? 'rank1' : ''}>{i + 1}</td>
-                  <td>{nomById.get(m.membre_id) ?? m.membre_id}</td>
-                  {membre.is_admin && <td className="num">{fmtNum(m.capital, 0)}</td>}
-                  <td className="num">{fmtNum(m.pct * 100, 2)} %</td>
+      {membre.is_admin ? (
+        <div className="card">
+          <h2>Top contributeurs</h2>
+          <p className="card-sub">Classement par capital apporté</p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Membre</th>
+                  <th className="num">Capital (FCFA)</th>
+                  <th className="num">% détention</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {top5.map((m, i) => (
+                  <tr key={m.membre_id}>
+                    <td className={i === 0 ? 'rank1' : ''}>{i + 1}</td>
+                    <td>{nomById.get(m.membre_id) ?? m.membre_id}</td>
+                    <td className="num">{fmtNum(m.capital, 0)}</td>
+                    <td className="num">{fmtNum(m.pct * 100, 2)} %</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="card">
+          <h2>Ton rang parmi les membres</h2>
+          <p className="card-sub">Classement par capital apporté — le détail des autres membres reste privé.</p>
+          {monRang ? (
+            <div className="calc-box">
+              <div className="item">
+                <div className="label">Ta position</div>
+                <div className="value">
+                  {monRang}{monRang === 1 ? 'er' : 'e'} sur {engine.capTable.length} membre{engine.capTable.length > 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="card-sub" style={{ marginBottom: 0 }}>Tu n&rsquo;as pas encore de parts enregistrées.</p>
+          )}
+        </div>
+      )}
     </Shell>
   );
 }
