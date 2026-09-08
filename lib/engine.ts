@@ -86,6 +86,21 @@ export function computeEngine(
     e.parts_calculees = null; // à résoudre via la VL applicable, ci-dessous
   });
 
+  // Les dépôts "Fondateur" portent chacun la date de SOUSCRIPTION individuelle du
+  // membre (date_effective), mais l'argent collecté reste en caisse jusqu'à son
+  // transfert groupé vers le compte-titres — l'écriture "Mouvement interne :
+  // COMPTES TITRES" — qui se fait en plusieurs vagues, à des dates différentes des
+  // souscriptions individuelles. Compter les parts fondateur dès la souscription
+  // (comme Post-fondation) créerait un décalage : des parts déjà comptées alors
+  // que l'argent correspondant n'est pas encore dans le portefeuille valorisé,
+  // sous-évaluant la VL entre chaque souscription et le déploiement groupé suivant.
+  // On indexe donc la part "Fondateur" de partsCirc sur le cumul réellement déployé
+  // vers le compte-titres à la date d (plafonné à capital_fondateur : au-delà, ce
+  // sont des déploiements de capital post-fondation, déjà comptés via postSum).
+  const totalComptesTitresFondateur = journal
+    .filter((e) => e.type === 'Mouvement interne' && e.libelle_interne === 'COMPTES TITRES' && e.montant < 0)
+    .reduce((s, e) => s + Math.abs(e.montant), 0);
+
   const valor = [...valorisationsIn].sort((a, b) => a.date.localeCompare(b.date));
   let prevVl: number | null = null;
   const results: ValorisationEnrichie[] = [];
@@ -117,23 +132,27 @@ export function computeEngine(
       )
       .reduce((s, e) => s + (e.parts_calculees as number), 0);
 
-    // Comme postSum ci-dessus, mais pour les dépôts "Fondateur" : avant cette
-    // correction, partsCirc utilisait le paramètre fixe `partsInitiales` pour TOUTE
-    // valorisation, y compris celles antérieures à l'arrivée effective de tous les
-    // fondateurs (déploiement en plusieurs vagues vers le compte-titres). Ça gonflait
-    // artificiellement le nombre de parts en circulation — donc sous-évaluait la VL —
-    // pendant la fenêtre entre la 1re valorisation et la fin du déploiement fondateur.
-    // On additionne maintenant dynamiquement, exactement comme pour Post-fondation.
-    const fondateurSum = journal
-      .filter(
-        (e) =>
-          e.type === 'Dépôt' &&
-          e.vague === 'Fondateur' &&
-          e.parts_calculees !== null &&
-          e.date_effective !== null &&
-          e.date_effective <= d
-      )
-      .reduce((s, e) => s + (e.parts_calculees as number), 0);
+    // fondateurSum : voir le commentaire au-dessus de la boucle. Repose sur le cumul
+    // déployé vers le compte-titres à la date d (fallback sur le comportement fixe
+    // d'origine si le journal ne contient aucune écriture COMPTES TITRES — un cas
+    // qui ne devrait pas arriver en usage réel, mais qui évite de casser un jeu de
+    // données de test minimal ou un usage futur différent).
+    let fondateurSum: number;
+    if (totalComptesTitresFondateur === 0) {
+      fondateurSum = partsInitiales;
+    } else {
+      const deploye = journal
+        .filter(
+          (e) =>
+            e.type === 'Mouvement interne' &&
+            e.libelle_interne === 'COMPTES TITRES' &&
+            e.montant < 0 &&
+            e.date_effective !== null &&
+            e.date_effective <= d
+        )
+        .reduce((s, e) => s + Math.abs(e.montant), 0);
+      fondateurSum = partsInitiales * (Math.min(deploye, capitalFondateur) / capitalFondateur);
+    }
 
     const retraitSum = journal
       .filter((e) => e.type === 'Retrait' && e.date_effective !== null && e.date_effective <= d)
