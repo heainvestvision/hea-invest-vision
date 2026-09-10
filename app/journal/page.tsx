@@ -144,10 +144,11 @@ export default async function JournalPage() {
           <h2>Souscrire les dépôts en attente</h2>
           <p className="card-sub">
             Sélectionne les dépôts à traiter ensemble et la date de souscription commune : leurs
-            parts seront attribuées à la VL applicable à cette date. Si des frais ont été engagés
-            pour réaliser l&rsquo;opération, indique leur montant total : il sera réparti à parts
-            égales entre les dépôts de cette vague. Précise ensuite quelle part correspond à une
-            dépense réelle — le reste, non dépensé, part automatiquement en réserve.
+            parts seront attribuées à la VL applicable à cette date, et le montant net correspondant
+            sera automatiquement transféré au compte-titres à cette même date. Si des frais ont été
+            engagés pour réaliser l&rsquo;opération, indique leur montant total : il sera réparti à
+            parts égales entre les dépôts de cette vague. Précise ensuite quelle part correspond à
+            une dépense réelle, le reste, non dépensé, part automatiquement en réserve.
           </p>
           <SouscriptionForm
             pending={engine.pending.map((e) => ({

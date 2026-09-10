@@ -57,6 +57,15 @@ export async function ajouterDepot(formData: FormData) {
 // vague (pas proportionnellement au montant de chacun) — exactement comme dans le
 // prototype. La part de ces frais qui correspond à une dépense réelle crée une écriture
 // "Mouvement interne" négative ; le reste, non dépensé, part automatiquement en réserve.
+//
+// La souscription crée aussi, automatiquement et systématiquement, le transfert de
+// l'argent vers le compte-titres (Mouvement interne "COMPTES TITRES"), à la même date
+// que la souscription et pour le même montant net (somme des dépôts moins les frais
+// imputés). Créer des parts SANS ce transfert n'aurait pas de sens : des parts créées
+// supposent que l'argent correspondant est déjà investi — voir la discussion du
+// 10/09/2026 avec Ridwan, qui a mis au jour un bug de VL exactement causé par ce genre
+// de décalage (des fondateurs saisis "vagues" par vagues, avec plusieurs semaines
+// d'écart entre leur souscription et leur transfert effectif vers le compte-titres).
 export async function souscrirePending(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
@@ -75,6 +84,13 @@ export async function souscrirePending(formData: FormData) {
   if (fraisTotal > 0 && fraisReel > fraisTotal) {
     throw new Error('La dépense réelle ne peut pas dépasser les frais totaux engagés.');
   }
+
+  const { data: depotsSelectionnes, error: eSelect } = await supabase
+    .from('journal')
+    .select('montant')
+    .in('id', ids);
+  if (eSelect) throw eSelect;
+  const montantTotal = (depotsSelectionnes ?? []).reduce((s, d) => s + Number(d.montant), 0);
 
   const { error } = await supabase
     .from('journal')
@@ -124,10 +140,33 @@ export async function souscrirePending(formData: FormData) {
     }
   }
 
+  // Transfert automatique vers le compte-titres : le montant net des dépôts
+  // souscrits (frais déjà déduits) est considéré investi à la même date que la
+  // souscription, sans exception — voir le commentaire au-dessus de la fonction.
+  const montantVersCompteTitres = Math.round(montantTotal - fraisTotal);
+  if (montantVersCompteTitres > 0) {
+    const { error: eCompteTitres } = await supabase.from('journal').insert({
+      membre_id: null,
+      libelle_interne: 'COMPTES TITRES',
+      date: dateSouscription,
+      montant: -montantVersCompteTitres,
+      type: 'Mouvement interne',
+      moyen: 'Caisse',
+      vague: '-',
+      parts: 0,
+      date_effective: dateSouscription,
+      frais_impute: 0,
+    });
+    if (eCompteTitres) throw eCompteTitres;
+  }
+
   await logHistorique(
     `${ids.length} dépôt${ids.length > 1 ? 's' : ''} souscrit${ids.length > 1 ? 's' : ''} au ${dateSouscription}` +
       (fraisTotal > 0
         ? ` — frais total ${fraisTotal.toLocaleString('fr-FR')} FCFA (réel ${fraisReel.toLocaleString('fr-FR')} FCFA, réserve ${(fraisTotal - fraisReel).toLocaleString('fr-FR')} FCFA)`
+        : '') +
+      (montantVersCompteTitres > 0
+        ? ` — ${montantVersCompteTitres.toLocaleString('fr-FR')} FCFA transférés au compte-titres`
         : ''),
     'Souscription'
   );
